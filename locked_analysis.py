@@ -107,28 +107,27 @@ def get_md_transition_statistics(transitions): #we must give this function our l
 
 def extract_info(struct_filename,traj_filename): #here is where we will get the coordinates of the ligand and receptor
   ref = mda.Universe(struct_filename) #creating our MDAnalysis universe for the RMSD reference, giving it the prmtop file
-  mobile = mda.Universe(struct_filename,traj_filename,topology_format='PRMTOP') #universe for our trajectory of interest
-  
-### It looks like you have made some changes here###
-  frame1 = mda.coordinates.DCD.DCDReader(dcd[0]) #coordinates for the first frame of the trajectory
-  frame2 = mda.coordinates.DCD.DCDReader(dcd[-1]) #coordinates for the last frame of the trajectory
+  mobile = mda.Universe(struct_filename,traj_filename,topology_format='PRMTOP') #universe for our trajectory of interest 
+  first_frame = mda.coordinates.DCD.DCDReader(dcd[0]) #coordinates for the first frame of the trajectory
+  last_frame = mda.coordinates.DCD.DCDReader(dcd[-1]) #coordinates for the last frame of the trajectory 
+  mda.analysis.align.alignto(first_frame, ref, select="resname BCD and name CA", mass_weighted=True) ##be careful here what is the variable "frame", you have frame1 and frame2  
+  mda.analysis.align.alignto(last_frame, ref, select="resname BCD and name CA", mass_weighted=True)
 
-### 
-  mda.analysis.align.alignto(frame, ref, select="resname BCD and name CA", mass_weighted=True) ##be careful here what is the variable "frame", you have frame1 and frame2  
+  return(first_frame,last_frame)
 
+def get_coords():
 #this is from the other script-- we are just extracting the coordinates we need and calculating the plane and its normal vector-- using the aligned trajectory from above
   plane_normal = []
   lig_com = []
   rec_com = []
-  for frame in trajectory: ##again watch out for "frame"
-    O3_A= u.select_atoms("resname BCD and name O3").center_of_mass()
-    O13_B= u.select_atoms("resname BCD and name O13").center_of_mass()
-    O23_C= u.select_atoms("resname BCD and name O23").center_of_mass()
-    BA = O3_A -O13_B
-    BC = O23_C - O13_B
-    plane_normal.append(np.cross(BA , BC))
-    lig_com.append(u.select_atoms("resname APN").center_of_mass())
-    rec_com.append(u.select_atoms("resname BCD").center_of_mass())
+  O3_A= u.select_atoms("resname BCD and name O3").center_of_mass()
+  O13_B= u.select_atoms("resname BCD and name O13").center_of_mass()
+  O23_C= u.select_atoms("resname BCD and name O23").center_of_mass()
+  BA = O3_A -O13_B
+  BC = O23_C - O13_B
+  plane_normal.append(np.cross(BA , BC))
+  lig_com.append(u.select_atoms("resname APN").center_of_mass())
+  rec_com.append(u.select_atoms("resname BCD").center_of_mass())
 
   plane_normal = np.array(plane_normal)
   lig_com = np.array(lig_com)
@@ -140,11 +139,9 @@ def extract_info(struct_filename,traj_filename): #here is where we will get the 
   #print 'Receptor COM Coordinates:'
   #pprint(rec_com)
 
-##we can't have two return statements, this will need to be fixed-- think about what we need to return and adjust both here and when the functinon is called 
-  return (plane_normal, lig_com, rec_com)
-  return (first, last)
+  return (plane_normal_first, lig_com_first, rec_com_first, plane_normal_last, lig_com_last, plane_normal_last)
 
-def measure_angle(extract_info): ##straight from the other code-- a function to calculate the orientation angle
+def measure_angle(): ##straight from the other code-- a function to calculate the orientation angle
   theta = []
   lig_vec = np.subtract(lig_com, rec_com)
     #print 'lig_vec:'
@@ -157,6 +154,7 @@ def measure_angle(extract_info): ##straight from the other code-- a function to 
   pprint(theta)
   return theta
 
+## should there be two measure_angle functions so that the angles can be compared as they are below? or is there a way to pass the functions and still compare?
 
 ## we will probably want to use this to determine which face the ligand is on!
 
@@ -200,9 +198,13 @@ def main():
     print traj_filename #print to check
 ##Everything appears to be working correctly up to this point in main### 
 
+  plane_normal_first, lig_com_first, rec_com_first= get_coords(first_frame)
+  plane_normal_last, lig_com_last, rec_com_last= get_coords(last_frame)
+
+  theta_first = measure_angle(plane_normal_first, rec_com_first, lig_com_first)
+  theta_last = measure_angle(plane_normal_last, rec_com_last, lig_com_last)
 #### The next thing we need is to use the trajectory above to get our coordinates... which functions (from above) will we need to call to do this and what variables to they requirei??#####
 
 
 
 if __name__ == "__main__": main()
-
