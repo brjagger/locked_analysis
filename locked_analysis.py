@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from numpy import linalg as LA
 from pprint import pprint
 import MDAnalysis as mda
+from MDAnalysis.analysis.align import *
 
 GRID_TRANSITION = "SEEKR: GRID TRANSITION: " #this is the string we are looking for in the output files
 GRID_TRANSITION_COMPILE = re.compile(GRID_TRANSITION) #here we are compiling this a regular expression so we can search for it
@@ -23,7 +24,7 @@ def parse_md_transitions(): #This function readsthe output files find trajectori
   transition_lines = [] # create a list containing all lines of the output that mark transitions
   transitions= [] #create a list to store all of the transitions
   for filename in forward_output_filenames: #go through each file in the glob and look for transitions
-    print 'output filename', filename #a test so we can make sure it is reading the right files
+    #print 'output filename', filename #a test so we can make sure it is reading the right files
     for line in open(filename,'r'): #open the output file for reading and go through each line
       if re.match(GRID_TRANSITION_COMPILE, line): #if the line matches the GRID_TRANSITION expression we defined above...
         transition_lines.append(line) #add (the text) of that line to the transition_lines list
@@ -106,105 +107,91 @@ def get_md_transition_statistics(transitions): #we must give this function our l
 '''
 
 def extract_info(struct_filename,traj_filename): #here is where we will get the coordinates of the ligand and receptor
-  ref = mda.Universe(struct_filename) #creating our MDAnalysis universe for the RMSD reference, giving it the prmtop file
+  #print "extract filename", traj_filename
+  struct_pdb= '../holo_wet.pdb'
+  ref = mda.Universe(struct_filename,struct_pdb ) #creating our MDAnalysis universe for the RMSD reference, giving it the prmtop file
   mobile = mda.Universe(struct_filename,traj_filename,topology_format='PRMTOP') #universe for our trajectory of interest 
-  first_frame = mda.coordinates.DCD.DCDReader(dcd[0]) #coordinates for the first frame of the trajectory
-  last_frame = mda.coordinates.DCD.DCDReader(dcd[-1]) #coordinates for the last frame of the trajectory 
-  mda.analysis.align.alignto(first_frame, ref, select="resname BCD and name CA", mass_weighted=True) ##be careful here what is the variable "frame", you have frame1 and frame2  
-  mda.analysis.align.alignto(last_frame, ref, select="resname BCD and name CA", mass_weighted=True)
+  return(mobile, ref)
 
-  return(first_frame,last_frame)
-
-def get_coords():
+def get_coords(u):
 #this is from the other script-- we are just extracting the coordinates we need and calculating the plane and its normal vector-- using the aligned trajectory from above
-  plane_normal = []
-  lig_com = []
-  rec_com = []
   O3_A= u.select_atoms("resname BCD and name O3").center_of_mass()
   O13_B= u.select_atoms("resname BCD and name O13").center_of_mass()
   O23_C= u.select_atoms("resname BCD and name O23").center_of_mass()
   BA = O3_A -O13_B
   BC = O23_C - O13_B
-  plane_normal.append(np.cross(BA , BC))
-  lig_com.append(u.select_atoms("resname APN").center_of_mass())
-  rec_com.append(u.select_atoms("resname BCD").center_of_mass())
+  plane_normal=np.cross(BA , BC)
+  lig_com=(u.select_atoms("resname APN").center_of_mass())
+  rec_com=(u.select_atoms("resname BCD").center_of_mass())
 
-  plane_normal = np.array(plane_normal)
-  lig_com = np.array(lig_com)
-  rec_com = np.array(rec_com)
-  #print 'plane_normal:'
-  #pprint(plane_normal)
-  #print 'Ligand COM Coordinates:'
-  #pprint(lig_com)
-  #print 'Receptor COM Coordinates:'
-  #pprint(rec_com)
+  return (plane_normal, lig_com, rec_com)
 
-  return (plane_normal_first, lig_com_first, rec_com_first, plane_normal_last, lig_com_last, plane_normal_last)
-
-def measure_angle(): ##straight from the other code-- a function to calculate the orientation angle
+def measure_angle(plane_normal, lig_com, rec_com): ##straight from the other code-- a function to calculate the orientation angle
   theta = []
   lig_vec = np.subtract(lig_com, rec_com)
     #print 'lig_vec:'
     #pprint(lig_vec)
-  for i in range(len(plane_normal)):
-    theta.append(np.arccos(np.dot(lig_vec[i],plane_normal[i])/(LA.norm(lig_vec[i])*LA.norm(plane_normal[i]))))
+  theta.append(np.arccos(np.dot(lig_vec,plane_normal)/(LA.norm(lig_vec)*LA.norm(plane_normal))))
   theta = np.array(theta)
   theta = np.degrees(theta)
-  print 'Theta:', theta.shape
-  pprint(theta)
+  #print 'Theta:', theta.shape
+  #pprint(theta)
   return theta
 
-## should there be two measure_angle functions so that the angles can be compared as they are below? or is there a way to pass the functions and still compare?
-
-## we will probably want to use this to determine which face the ligand is on!
-
-#def compare_angles(measure_angle):
-  #same_secondary=[]
-   # for angle in compare_angles(theta):
-   # if (first > 90.0 && last > 90.0):
-    #  same_secondary.append(angle)
- # same_primary=[]
-   # for angle in compare_angles(theta):
-   # if (first < 90.0 && last < 90.0):
-    #   same_primary.append(angle)
- # primary_secondary_trans=[]
-   # for angle in compare_angles(theta):
-   # if (first < 90.0 && last > 90.0):
-     #  primary_secondary_trans.append(angle)
-  #secondary_primary_trans=[]
-   # for angle in compare_angles(theta):
-   # if (first > 90.0 && last < 90.0):
-    #   secondary_primary.append(angle)
- # return (same_secondary, same_primary, primary_secondary_trans, secondary_primary_trans)
+def compare_angles(first, last):
+  same_secondary= False
+  same_primary=False
+  primary_secondary_trans= False
+  secondary_primary_trans=False
+#  for angle in compare_angles(theta):
+  if first > 90.0 and last > 90.0:
+    same_secondary= True
+  if first < 90.0 and last < 90.0:
+     same_primary= True
+  if first < 90.0 and last > 90.0:
+     primary_secondary_trans= True
+  if first > 90.0 and last < 90.0:
+     secondary_primary_trans= True
+  return (same_secondary, same_primary, primary_secondary_trans, secondary_primary_trans)
 
 
 def main():
 #parser allows uss to provide arguments when we run the code from the command line
   parser= argparse.ArgumentParser(description='Analyzes forward reverse output for systems with locked milestones')
-  parser.add_argument('anchor', metavar='ANCHOR', type=str, help="the anchor that will be analyzed") #the first argument is the anchor number we want to analyze
-  parser.add_argument('-m', '--milestones', dest="milestones", type=str, help="Milestones file") # This should contain most of what the user needs regarding the milestones
+  #parser.add_argument('anchor', metavar='ANCHOR', type=str, help="the anchor that will be analyzed") #the first argument is the anchor number we want to analyze
+  #parser.add_argument('-m', '--milestones', dest="milestones", type=str, help="Milestones file") # This should contain most of what the user needs regarding the milestones
   args = parser.parse_args() # parse all the arguments
   args = vars(args) 
 
-  anchor= args['anchor'] #store the anchor number as a variable
-  print "Performing analysis for anchor: " , anchor
+  #anchor= args['anchor'] #store the anchor number as a variable
+  #print "Performing analysis for anchor: " , anchor
   transitions= parse_md_transitions()  #calls the parse_md_transitions function and stores whatever is returned as the variable "transitions"
+  #print transitions
   Transition.print_status(transitions[0]) #just printing to check that we read the file properly
   #get_md_transitions(transitions)
   struct_filename= '../building/holo.prmtop' #the name of the structure we wil give to MDAnalysis
+  face_transitions=[]
   for transition in transitions: #for each transition that was returned from parse_md_transitions...
     #print "ID:", str(transition.ID)
     traj_filename= str("forward."+transition.ID+".0.dcd") #select the trajectory file that corresponds to that transition-- transition.ID comes from the file we parsed
-    print traj_filename #print to check
-##Everything appears to be working correctly up to this point in main### 
-
-  plane_normal_first, lig_com_first, rec_com_first= get_coords(first_frame)
-  plane_normal_last, lig_com_last, rec_com_last= get_coords(last_frame)
-
-  theta_first = measure_angle(plane_normal_first, rec_com_first, lig_com_first)
-  theta_last = measure_angle(plane_normal_last, rec_com_last, lig_com_last)
-#### The next thing we need is to use the trajectory above to get our coordinates... which functions (from above) will we need to call to do this and what variables to they requirei??#####
-
+    #print traj_filename #print to check
+    u, ref = extract_info(struct_filename, traj_filename) #create our MDAnalysis universe as well as a reference for alignment
+    #print "dcd length",len(u.trajectory)
+    u.trajectory[0] #get just the first frame of the trajectory
+    mda.analysis.align.alignto(u, ref, select="resname BCD", mass_weighted=True) #align to the reference structure
+    plane_normal_first, lig_com_first, rec_com_first= get_coords(u) #get coordinates of lig and receptor and calculate the plane normal vector
+    u.trajectory[-1] #move to the last frame of the trajectory
+    mda.analysis.align.alignto(u, ref, select="resname BCD", mass_weighted=True) #align to the reference structure
+    plane_normal_last, lig_com_last, rec_com_last= get_coords(u) ##get coordinates of lig and receptor and calculate the plane normal vector
+    theta_first = measure_angle(plane_normal_first, rec_com_first, lig_com_first) #calclate the angle for the first frame
+    theta_last = measure_angle(plane_normal_last, rec_com_last, lig_com_last) #calculate the angle for the last frame
+    #print 'Theta first:', theta_first, 'Theta Last:' ,theta_last
+    same_secondary, same_primary, primary_secondary_trans, secondary_primary_trans= compare_angles(theta_first, theta_last) #compare the angles and look for any transitions between faces
+    if secondary_primary_trans == True or primary_secondary_trans==True:
+      print traj_filename, theta_first, theta_last #print the names and angles of any forward trajectories that cross the plane
+      face_transitions.append(traj_filename)
+  print "Face Transitions:"
+  pprint(face_transitions)
 
 
 if __name__ == "__main__": main()
