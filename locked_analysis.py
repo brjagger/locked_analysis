@@ -24,13 +24,13 @@ def parse_md_transitions(): #This function readsthe output files find trajectori
   transition_lines = [] # create a list containing all lines of the output that mark transitions
   transitions= [] #create a list to store all of the transitions
   for filename in forward_output_filenames: #go through each file in the glob and look for transitions
-    #print 'output filename', filename #a test so we can make sure it is reading the right files
+    print 'output filename', filename #a test so we can make sure it is reading the right files
     for line in open(filename,'r'): #open the output file for reading and go through each line
       if re.match(GRID_TRANSITION_COMPILE, line): #if the line matches the GRID_TRANSITION expression we defined above...
         transition_lines.append(line) #add (the text) of that line to the transition_lines list
   # feed the lines into the Transition object-- we are creating an object here because this may come in handy for future uses of the code
-    for line in transition_lines: #go through each entry in the transition_lines list
-      transitions.append(Transition(line)) #Add each of the successful transitions to the transitions list-- take a look at the Transition class to see what's going on here
+  for line in transition_lines: #go through each entry in the transition_lines list
+    transitions.append(Transition(line)) #Add each of the successful transitions to the transitions list-- take a look at the Transition class to see what's going on here
   return transitions #pass the transitions list back to the main function where it was called
 
 ####This is extra stuff we probably don't need anymore (but let's hang on to it just in case)####
